@@ -11,6 +11,7 @@
 #include "theme.h"
 #include "screens.h"
 #include "app_updates.h"
+#include "beta_pin.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -318,17 +319,27 @@ static void do_check_updates(lv_event_t * e) {
     }
 }
 
-static void on_channel_toggle(lv_event_t * e) {
-    lv_obj_t * sw = lv_event_get_target(e);
-    settings.update_channel = lv_obj_has_state(sw, LV_STATE_CHECKED) ? 1 : 0;
+static void on_channel_select(lv_event_t * e) {
+    lv_obj_t * dd = lv_event_get_target(e);
+    int ch = (int)lv_dropdown_get_selected(dd);   /* 0 stable, 1 beta, 2 own */
+    settings.update_channel = ch;
     settings_save();
+    /* The own-build channel is also the beta guard's switch: choosing an
+     * official channel turns the guard off, so a deliberate official update
+     * is no longer rolled back. */
+    beta_pin_set(ch == 2);
     if (s_about_status_lbl) {
-        lv_label_set_text(s_about_status_lbl,
-            settings.update_channel ? tr("Kanaal: beta/dev - zoeken...",
-                                         "Channel: beta/dev - checking...")
-                                    : tr("Kanaal: stabiel - zoeken...",
-                                         "Channel: stable - checking..."));
+        const char * txt =
+            ch == 2 ? (beta_pin_installed()
+                       ? tr("Eigen bouw: officiele updates worden teruggedraaid",
+                            "Own build: official updates are rolled back")
+                       : tr("Kanaal: eigen bouw - zoeken...",
+                            "Channel: own build - checking..."))
+          : ch == 1 ? tr("Kanaal: beta/dev - zoeken...", "Channel: beta/dev - checking...")
+                    : tr("Kanaal: stabiel - zoeken...", "Channel: stable - checking...");
+        lv_label_set_text(s_about_status_lbl, txt);
     }
+    g_update_state.available = 0;   /* drop a banner from the previous channel */
     pthread_t t;
     if (pthread_create(&t, NULL, check_thread, NULL) == 0) {
         pthread_detach(t);
@@ -512,16 +523,22 @@ void update_modal_open(lv_obj_t * parent) {
     if (settings.auto_update_enabled) lv_obj_add_state(au_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(au_sw, on_auto_update_toggle, LV_EVENT_VALUE_CHANGED, NULL);
 
-    /* Release channel toggle */
+    /* Release channel: stable / beta / own build */
     lv_obj_t * ch_lbl = lv_label_create(panel);
     lv_obj_set_style_text_font(ch_lbl, SF(18), 0);
     lv_obj_set_style_text_color(ch_lbl, lv_color_hex(THEME_TEXT_HI), 0);
-    lv_label_set_text(ch_lbl, tr("Beta / dev", "Beta / dev"));
+    lv_label_set_text(ch_lbl, tr("Kanaal", "Channel"));
     lv_obj_align(ch_lbl, LV_ALIGN_TOP_LEFT, SX(430), SY(296));
-    lv_obj_t * ch_sw = lv_switch_create(panel);
-    lv_obj_align(ch_sw, LV_ALIGN_TOP_LEFT, SX(600), SY(290));
-    if (settings.update_channel) lv_obj_add_state(ch_sw, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(ch_sw, on_channel_toggle, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_t * ch_dd = lv_dropdown_create(panel);
+    lv_dropdown_set_options(ch_dd, tr("Stabiel\nBeta / dev\nEigen bouw",
+                                      "Stable\nBeta / dev\nOwn build"));
+    lv_obj_set_width(ch_dd, SX(190));
+    lv_obj_set_style_text_font(ch_dd, SF(16), 0);
+    lv_obj_align(ch_dd, LV_ALIGN_TOP_LEFT, SX(520), SY(286));
+    lv_dropdown_set_selected(ch_dd, (uint16_t)(settings.update_channel >= 0 &&
+                                               settings.update_channel <= 2
+                                               ? settings.update_channel : 1));
+    lv_obj_add_event_cb(ch_dd, on_channel_select, LV_EVENT_VALUE_CHANGED, NULL);
 
     /* Marketplace apps: nightly auto-update toggle + what's pending */
     lv_obj_t * aa_lbl = lv_label_create(panel);

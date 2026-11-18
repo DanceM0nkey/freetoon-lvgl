@@ -13,6 +13,7 @@
 #include "layout.h"
 #include "tile_slots.h"
 #include "update_check.h"
+#include "beta_pin.h"
 #include "backlight.h"
 #include "homewizard.h"
 #include "weather.h"
@@ -229,6 +230,7 @@ int main(int argc, char** argv) {
         fprintf(stderr, "[main] pwa_start failed\n");
     if (update_check_start() != 0)
         fprintf(stderr, "[main] update_check_start failed\n");
+    beta_pin_start();
     packages_start();
 
     extern void airhist_start(void);
