@@ -3107,7 +3107,9 @@ static void refresh_cb(lv_timer_t * t) {
     if (lbl_forecast_city) {
         const char * city = settings.weather_location[0] ? settings.weather_location : tr("Weer", "Forecast");
         if (weather_state.connected)
-            ui_label_set_text_fmt(lbl_forecast_city, tr("%s  -  %.1f°C nu", "%s  -  %.1f°C now"),
+            ui_label_set_text_fmt(lbl_forecast_city,
+                                  settings.weather_use_feel ? tr("%s  -  voelt als %.1f°C", "%s  -  feels like %.1f°C")
+                                                            : tr("%s  -  %.1f°C nu", "%s  -  %.1f°C now"),
                                   city, weather_display_temp());
         else
             ui_label_set_text(lbl_forecast_city, city);
