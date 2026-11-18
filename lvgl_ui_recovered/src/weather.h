@@ -83,6 +83,13 @@ void weather_radar_refresh_async(void);   /* fetch the radar map now */
  * location search, Dutch places first). Returns the id or 0 if not found. */
 int weather_geocode(const char * city);
 
+/* Nearest Buienradar place to a coordinate (location/geo). Returns its id
+ * (0 = no answer / nothing found) and copies its name into name. */
+#include <stddef.h>
+int weather_geocode_coords(double lat, double lon, char * name, size_t namesz);
+/* "51.83" or "51,83" -> 51.83 */
+double weather_coord_atof(const char * s);
+
 #ifdef SIM
 /* Synchronous lookup + forecast fetch that prints the result (sim `wxfetch`). */
 int weather_fetch_now(void);
