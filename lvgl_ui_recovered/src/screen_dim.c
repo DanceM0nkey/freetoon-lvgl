@@ -41,6 +41,7 @@ static lv_obj_t * dim_img_flame;   /* CH flame — paired with lbl_burner */
 static lv_obj_t * dim_img_faucet;  /* DHW faucet — visible only on dhw_on */
 static lv_obj_t * dim_img_drop;    /* paired water-drop next to the faucet */
 static lv_obj_t * wx_icon = NULL;
+static lv_obj_t * lbl_outside_feel = NULL;   /* "gevoel" when the feel temp is shown */
 static lv_obj_t * lbl_outside = NULL;
 static lv_obj_t * waste_icon = NULL;
 static lv_obj_t * waste_icon_2 = NULL;   /* 2nd bin shown when same day has 2 types */
@@ -487,7 +488,9 @@ static void refresh_cb(lv_timer_t * t) {
         if (settings.show_dim_weather && weather_state.connected) {
             const char * city = settings.weather_location[0]
                                 ? settings.weather_location : tr("Verwachting", "Forecast");
-            ui_label_set_text_fmt(dim_lbl_city, tr("%s  -  %.1f°C nu", "%s  -  %.1f°C now"),
+            ui_label_set_text_fmt(dim_lbl_city,
+                                  settings.weather_use_feel ? tr("%s  -  voelt als %.1f°C", "%s  -  feels like %.1f°C")
+                                                            : tr("%s  -  %.1f°C nu", "%s  -  %.1f°C now"),
                                   city, weather_display_temp());
             ui_obj_clear_flag(dim_lbl_city, LV_OBJ_FLAG_HIDDEN);
         } else {
@@ -530,6 +533,17 @@ static void refresh_cb(lv_timer_t * t) {
             ui_obj_clear_flag(lbl_outside_temp, LV_OBJ_FLAG_HIDDEN);
         } else {
             ui_obj_add_flag(lbl_outside_temp, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    /* With "Gevoelstemperatuur tonen" on, the big number is the feels-like
+     * value (wind chill: 9.7 C reads 5.5 C at Bft 3). Say so, or it looks
+     * like a wrong reading next to the forecast's real temperatures. */
+    if (lbl_outside_feel) {
+        if (settings.weather_use_feel && settings.show_dim_weather && weather_state.connected) {
+            if (wx_icon) lv_obj_align_to(lbl_outside_feel, wx_icon, LV_ALIGN_OUT_LEFT_MID, SX(-10), 0);
+            ui_obj_clear_flag(lbl_outside_feel, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            ui_obj_add_flag(lbl_outside_feel, LV_OBJ_FLAG_HIDDEN);
         }
     }
     if (wx_icon) {
@@ -936,6 +950,12 @@ lv_obj_t * screen_dim_create(void) {
     ui_obj_set_style_img_recolor(wx_icon, lv_color_hex(0xffffff), 0);
     ui_obj_set_style_img_recolor_opa(wx_icon, 255, 0);
     lv_obj_align_to(wx_icon, lbl_outside_temp, LV_ALIGN_OUT_BOTTOM_MID, 0, SY(2));
+
+    lbl_outside_feel = lv_label_create(scr_root);
+    ui_obj_set_style_text_color(lbl_outside_feel, lv_color_hex(0xbbbbbb), 0);
+    ui_obj_set_style_text_font(lbl_outside_feel, SF(18), 0);
+    ui_label_set_text(lbl_outside_feel, tr("gevoel", "feels like"));
+    ui_obj_add_flag(lbl_outside_feel, LV_OBJ_FLAG_HIDDEN);
 
     /* No "Buiten" caption: the big temp + icon speak for themselves. */
     lbl_outside = NULL;
