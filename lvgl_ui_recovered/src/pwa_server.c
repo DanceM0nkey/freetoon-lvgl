@@ -1511,7 +1511,7 @@ static int handle_settings_post(int fd, const char * body) {
     if (extract_int(body, "hide_offline_tiles", &iv)) settings.hide_offline_tiles = !!iv;
     if (extract_int(body, "boot_picker_enabled", &iv))settings.boot_picker_enabled = !!iv;
     if (extract_int(body, "update_check_enabled", &iv))settings.update_check_enabled = !!iv;
-    if (extract_int(body, "update_channel", &iv))      settings.update_channel = !!iv;
+    if (extract_int(body, "update_channel", &iv) && iv >= 0 && iv <= 2) settings.update_channel = iv;
     if (extract_int(body, "mqtt_enabled", &iv))       settings.mqtt_enabled = !!iv;
     /* WASM slave Settings posts these via settings_save() → fetch /api/settings;
      * accepting them here keeps the slave UI in sync with the master cfg. */

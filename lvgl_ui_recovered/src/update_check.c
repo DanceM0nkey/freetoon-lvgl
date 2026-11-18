@@ -20,7 +20,7 @@ void ui_request_restart(void);   /* ui_stack.c (screens.h pulls in LVGL) */
 #include <unistd.h>
 
 #define UPDATE_CHECK_INTERVAL_S (24 * 3600)  /* 24 h (once a day) between polls */
-/* Two update channels (settings.update_channel):
+/* Update channels (settings.update_channel; 2 = own build, see below):
  *   1 = beta/dev (default): newest release INCLUDING prereleases. We fetch a
  *       page of recent releases and pick the HIGHEST SEMVER tag ourselves —
  *       NOT index 0 — because GitHub orders /releases by created_at, so a
@@ -37,6 +37,13 @@ void ui_request_restart(void);   /* ui_stack.c (screens.h pulls in LVGL) */
  * created_at order is scrambled by a re-created older release. */
 #define RELEASES_API_BETA   "https://api.github.com/repos/ToonzDev/freetoon-lvgl/releases?per_page=5"
 #define RELEASES_API_STABLE "https://api.github.com/repos/ToonzDev/freetoon-lvgl/releases/latest"
+/* 2 = own build ("Eigen bouw"): a privately built beta, pinned on the Toon by
+ * scripts/beta_guard.sh. Only releases of the owner's fork are looked at, so
+ * the banner never offers an official build that would replace it. The fork
+ * has no releases until its owner publishes one: then this is simply quiet. */
+#define OWN_REPO            "DanceM0nkey/freetoon-lvgl"
+#define RELEASES_API_OWN    "https://api.github.com/repos/" OWN_REPO "/releases?per_page=5"
+#define OFFICIAL_REPO       "ToonzDev/freetoon-lvgl"
 
 /* Lightweight connectivity probe used to tell "the GitHub API itself is
  * unreachable / rate-limited / blocked" apart from "the Toon has no internet
@@ -125,28 +132,40 @@ static void parse_ver(const char * s, int * a, int * b, int * c) {
     sscanf(s, "%d.%d.%d", a, b, c);
 }
 
-/* Return 1 ONLY when `tag` is a strictly NEWER release than the running build
- * (numeric major.minor.patch). Equal or older → 0, so we never offer a
- * downgrade — a dev build (e.g. v0.9.5) won't flag the latest release v0.9.4
- * as "available". */
-static int is_newer_than_build(const char * tag) {
-    if (!nonempty(tag)) return 0;
-    int ta, tb, tc, ba, bb, bc;
-    parse_ver(tag, &ta, &tb, &tc);
-    parse_ver(BUILD_VERSION, &ba, &bb, &bc);
-    if (ta != ba) return ta > ba;
-    if (tb != bb) return tb > bb;
-    return tc > bc;
+/* Own-build label: "1.0.12-beta.lourens.3" -> 3. Returns -1 when the version
+ * carries no "-beta." part (an official release, or a git-describe dev
+ * build such as "1.0.12-32-gc588be6", which keeps comparing as before). */
+static int beta_build_no(const char * s) {
+    const char * p = strstr(s, "-beta.");
+    if (!p) return -1;
+    const char * dot = strrchr(p, '.');
+    int n = 0;
+    if (dot && dot[1] >= '0' && dot[1] <= '9') n = atoi(dot + 1);
+    return n;
 }
 
-/* Numeric major.minor.patch compare: >0 if a newer than b, <0 older, 0 equal. */
+/* >0 if a newer than b, <0 older, 0 equal. major.minor.patch first; on a tie
+ * a beta build counts as newer than one without a beta label (it was built
+ * on top of that release), and two beta builds compare by their number. */
 static int ver_cmp(const char * a, const char * b) {
     int aa, ab, ac, ba, bb, bc;
     parse_ver(a, &aa, &ab, &ac);
     parse_ver(b, &ba, &bb, &bc);
     if (aa != ba) return aa - ba;
     if (ab != bb) return ab - bb;
-    return ac - bc;
+    if (ac != bc) return ac - bc;
+    int na = beta_build_no(a), nb = beta_build_no(b);
+    if (na < 0 && nb < 0) return 0;
+    if (na < 0) return -1;
+    if (nb < 0) return 1;
+    return na - nb;
+}
+
+/* Return 1 ONLY when `tag` is a strictly NEWER release than the running build.
+ * Equal or older -> 0, so we never offer a downgrade. */
+static int is_newer_than_build(const char * tag) {
+    if (!nonempty(tag)) return 0;
+    return ver_cmp(tag, BUILD_VERSION) > 0;
 }
 
 void update_check_now(void) {
@@ -161,8 +180,10 @@ void update_check_now(void) {
      * (they're first in the JSON). Longer timeout for the bigger transfer. */
     static char body[524288];
     body[0] = 0;
-    const char * api = settings.update_channel == 0
-                       ? RELEASES_API_STABLE : RELEASES_API_BETA;
+    const char * api = settings.update_channel == 0 ? RELEASES_API_STABLE
+                     : settings.update_channel == 2 ? RELEASES_API_OWN
+                     : RELEASES_API_BETA;
+    const char * repo = settings.update_channel == 2 ? OWN_REPO : OFFICIAL_REPO;
     /* TLS-verified: this decides which release auto-update installs. */
     int rc = http_fetch_secure(api, body, sizeof body, 20);
     g_update_state.last_check_epoch = (long)time(NULL);
@@ -197,7 +218,7 @@ void update_check_now(void) {
         snprintf(g_update_state.changelog, sizeof g_update_state.changelog,
                  "%s\n%s\n", tag, nonempty(notes) ? notes : "(no notes)");
     } else {
-        /* Beta channel: body is an array of releases. Walk every "tag_name",
+        /* Beta and own-build channels: body is an array of releases. Walk every "tag_name",
          * keep the highest semver for the banner (don't trust GitHub's date
          * order), AND append each release's notes to the changelog (in the
          * order returned — newest first) for the About modal's history view. */
@@ -234,7 +255,7 @@ void update_check_now(void) {
              * matching release object out of the array (brittle with nested
              * author/assets objects). */
             snprintf(url, sizeof url,
-                "https://github.com/ToonzDev/freetoon-lvgl/releases/tag/%s", tag);
+                "https://github.com/%s/releases/tag/%s", repo, tag);
             /* notes = the "body" field that follows this release's tag_name. */
             if (best_at) json_extract_str(best_at, "body", notes, sizeof notes);
         }
@@ -267,6 +288,28 @@ void update_install_now(void) {
              g_update_state.latest_version[0] ? g_update_state.latest_version : "nieuwste versie");
     notify_show("update", "freetoon", msg);
     fprintf(stderr, "[update] installing now: %s\n", g_update_state.latest_version);
+    if (settings.update_channel == 2) {
+        /* Own build: install the found fork release with the installer from
+         * that same tag, never the official one from ToonzDev main. The
+         * beta guard recognises the "-beta." label and pins the new build. */
+        const char * tag = g_update_state.latest_version;
+        for (const char * c = tag; *c; c++) {
+            if (!((*c >= '0' && *c <= '9') || (*c >= 'a' && *c <= 'z') ||
+                  (*c >= 'A' && *c <= 'Z') || *c == '.' || *c == '-' || *c == '_')) {
+                fprintf(stderr, "[update] refusing odd tag name\n");
+                return;
+            }
+        }
+        if (!tag[0]) return;
+        char cmd[640];
+        snprintf(cmd, sizeof cmd,
+            "nohup sh -c ': > /var/volatile/tmp/selfinstall.log; sleep 2; curl -fsSL -4 "
+            "https://raw.githubusercontent.com/" OWN_REPO "/%s/install.sh "
+            "| env FORCE_DOWNLOAD=1 REPO=" OWN_REPO " sh -s -- --update' "
+            ">> /var/volatile/tmp/selfinstall.log 2>&1 &", tag);
+        system(cmd);
+        return;
+    }
     system("nohup sh -c ': > /var/volatile/tmp/selfinstall.log; sleep 2; curl -fsSL -4 "
            "https://raw.githubusercontent.com/ToonzDev/freetoon-lvgl/main/install.sh "
            "| env FORCE_DOWNLOAD=1 sh -s -- --update' >> /var/volatile/tmp/selfinstall.log 2>&1 &");

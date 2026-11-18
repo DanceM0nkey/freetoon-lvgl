@@ -496,7 +496,7 @@ void settings_load(void) {
         else if (strcmp(k, "boot_picker_enabled") == 0) settings.boot_picker_enabled = iv;
         else if (strcmp(k, "hide_offline_tiles")  == 0) settings.hide_offline_tiles = iv;
         else if (strcmp(k, "update_check_enabled") == 0) settings.update_check_enabled = iv;
-        else if (strcmp(k, "update_channel")       == 0) settings.update_channel = !!iv;
+        else if (strcmp(k, "update_channel")       == 0) settings.update_channel = (iv >= 0 && iv <= 2) ? iv : 1;
         else if (strcmp(k, "vnc_enabled")     == 0) settings.vnc_enabled = iv;
         else if (strcmp(k, "vnc_pass")        == 0)
             snprintf(settings.vnc_pass, sizeof settings.vnc_pass, "%s", v);

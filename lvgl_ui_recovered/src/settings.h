@@ -175,7 +175,9 @@ typedef struct {
      * fetch entirely (no network call, no banner). */
     int update_check_enabled;
     /* Update channel: 1 = beta/dev (newest release incl. prereleases, default),
-     * 0 = stable/official only (/releases/latest, skips prereleases). */
+     * 0 = stable/official only (/releases/latest, skips prereleases),
+     * 2 = own build: only the owner's fork releases; also switches the
+     *     on-Toon beta guard (/mnt/data/beta-pin, beta_pin.h) on. */
     int update_channel;
 
     /* Hide offline tiles on the home screen. Default 0 → tiles for
