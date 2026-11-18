@@ -1539,8 +1539,12 @@ static int handle_settings_post(int fd, const char * body) {
         }
         if (city_changed && settings.weather_location[0]) {
             int gid = weather_geocode(settings.weather_location);
-            if (gid > 0) settings.weather_location_id = gid;
-            else if (extract_int(body, "weather_location_id", &iv) && iv > 0)
+            if (gid > 0) {
+                settings.weather_location_id = gid;
+                /* One place choice, as on the device: old manual Lat/Lon would
+                 * keep the rain tile and radar on the previous place. */
+                settings.weather_lat[0] = settings.weather_lon[0] = 0;
+            } else if (extract_int(body, "weather_location_id", &iv) && iv > 0)
                 settings.weather_location_id = iv;   /* name not found: keep the given id */
             weather_relocate_async();
             buienradar_rain_refresh_async();   /* rain tile follows, as on the device */

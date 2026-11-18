@@ -258,13 +258,23 @@ static void on_weather_apply(lv_event_t * e) {
         }
     }
 
-    int geo_failed = 0;
+    int geo_failed = 0, coords_cleared = 0;
     if (geo_by_coords) {
         /* place + id come from the coordinates */
     } else if (city_changed && settings.weather_location[0]) {
         int gid = weather_geocode(settings.weather_location);
-        if (gid > 0) settings.weather_location_id = gid;
-        else {
+        if (gid > 0) {
+            settings.weather_location_id = gid;
+            /* One place choice: a new place name drops old Lat/Lon that were
+             * left unchanged, so the rain tile and radar follow the place
+             * instead of staying on the previous coordinates. */
+            if (!coords_changed && (settings.weather_lat[0] || settings.weather_lon[0])) {
+                settings.weather_lat[0] = settings.weather_lon[0] = 0;
+                if (ta_wx_lat) lv_textarea_set_text(ta_wx_lat, "");
+                if (ta_wx_lon) lv_textarea_set_text(ta_wx_lon, "");
+                coords_cleared = 1;
+            }
+        } else {
             geo_failed = 1;
             int id = ta_wx_id ? atoi(lv_textarea_get_text(ta_wx_id)) : 0;
             if (id > 0) settings.weather_location_id = id;
@@ -304,6 +314,10 @@ static void on_weather_apply(lv_event_t * e) {
         else
             o += snprintf(st + o, sizeof st - (size_t)o, tr("Opgeslagen. %s = %d", "Saved. %s = %d"),
                           settings.weather_location, settings.weather_location_id);
+        if (coords_cleared)
+            o += snprintf(st + o, sizeof st - (size_t)o, "%s",
+                          tr(" Oude Lat/Lon gewist: regen en radar volgen de plaats.",
+                             " Old Lat/Lon cleared: rain and radar follow the place."));
         if (coords_far)
             snprintf(st + o, sizeof st - (size_t)o, "%s",
                      tr(" Let op: Lat/Lon liggen buiten Nederland/Belgie.",
